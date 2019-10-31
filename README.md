@@ -3,7 +3,7 @@ Udacity Nanodegree Self Driving Car/ Radar proj
 
 
 # Project Overview
-![ProjectOverview](https://user-images.githubusercontent.com/51704629/66046436-afc42800-e560-11e9-8b32-caa1f222c5f6.png)
+![ProjectOverview](https://github.com/Felix-yuan2018/SFND_Radar_Target_Generation_and_Detection/blob/master/img/ProjectOverview.png)
 
 * Configure the FMCW waveform based on the system requirements.
 * Define the range and velocity of target and simulate its displacement.
@@ -18,10 +18,12 @@ Udacity Nanodegree Self Driving Car/ Radar proj
 * Max Velocity = 70 m/s
 
 ```matlab
-fc= 77e9;
-range_max_m = 200;
-d_res_m = 1;
-velocity_max_ms = 70;
+fc= 77e9;             %carrier freq
+c=3e8;                %speed of light
+max_range=200;        %max range
+range_resolution=1;   % range resolution can determine bandwith
+max_velocity=100;     % max velocity can determine Ts_x-axis
+
 ```
 
 
@@ -31,8 +33,9 @@ velocity_max_ms = 70;
 * Note: Velocity remains constant
 
 ```matlab
-R = 50; % Traget Initial Range
-v = -30; % Target Velocity
+Range = 110;     % Initial position of the target
+velocity = -20;  % Initial Velocity of the target
+
 ```
 
 
@@ -43,9 +46,9 @@ v = -30; % Target Velocity
 * Operating carrier frequency of Radar
 
 ```matlab
-Tchirp = 5.5 * (range_max_m * 2)/c_ms;
-Bsweep = c_ms/(2*d_res_m);
-slope = Bsweep/Tchirp;
+Bandwidth= c/(2*range_resolution);  
+Tchirp = 5.5*2*max_range/c;      %Chirp Time
+slope=Bandwidth/Tchirp;          %slope of the FMCW
 ```
 
 * The number of chirps in one sequence.
@@ -90,12 +93,15 @@ td=zeros(1,length(t));
 for i=1:length(t)    
     
     % For each time stamp update the Range of the Target for constant velocity. 
-    r_t(i) = R + v * t(i);
-    td(i) = 2 * r_t(i) / c_ms;
+     r_t(i) = range + velocity*t(i);      %Update the Range of the Target for constant velocity.
+     td(i) = (2*r_t(i))/c;                  %compute time_delay.
+
+
     
     % For each time sample we need update the transmitted and Received signal. 
-    Tx(i) = cos(2*pi*(fc*t(i) + (slope*t(i)^2/2)));
-    Rx(i) = cos(2*pi*(fc * (t(i) - td(i)) + 0.5 * slope * (t(i) - td(i))^2));
+    Tx(i) = cos(2*pi*(fc*t(i)+ 0.5*slope*t(i)^2));
+    Rx(i)  = cos(2*pi*(fc*(t(i)-td(i))+ 0.5*slope*(t(i)-td(i))^2));
+
     
     % Now by mixing the Transmit and Receive generate the beat signal This is done by element
     % wise matrix multiplication of Transmit and Receiver Signal
@@ -114,32 +120,37 @@ end
 
 ```matlab
 Mix = reshape(Mix, [Nr,  Nd]);
-sig_fft1=zeros(Nr, Nd);
-for i=1:Nd
-    sig_fft1(:, i) = fft(Mix(:, i), Nr); % FFT
-    sig_fft1 = sig_fft1./Nr; % normalize
-end
-freq_beat_matrix = abs (sig_fft1);
+%run the FFT on the beat signal along the range bins dimension (Nr) and
+sig_fft1 = fft(Mix,Nr); 
+ 
+%normalize.
+sig_fft1 = sig_fft1./Nr;
+
+% Take the absolute value of FFT output
+sig_fft1 = abs(sig_fft1);  
+
+
 ```
 
 * Output of FFT is double sided signal, but we are interested in only one side of the spectrum.
 * Hence we throw out half of the samples.
 
 ```matlab
-freq_beat_matrix = freq_beat_matrix (1:Nr/2,:);
+single_side_sig_fft1 = sig_fft1(1:Nr/2);
+
 ```
 
 * Plotting the range, plot FFT output
 
 ```matlab
 figure ('Name','Range from First FFT')
-plot (freq_beat_matrix);
-axis ([0 200 0 0.5]);
+plot(single_side_sig_fft1); 
+axis ([0 200 0 1]);
 ```
 
 * Simulation Result
 
-![RangeFFT](https://user-images.githubusercontent.com/51704629/66047793-60332b80-e563-11e9-93ec-8e1c853d335c.png)
+![RangeFFT](https://github.com/Felix-yuan2018/SFND_Radar_Target_Generation_and_Detection/blob/master/img/RangeFFT.png)
 
 
 ## 6. Range Doppler Response
@@ -179,7 +190,7 @@ figure,surf(doppler_axis,range_axis,RDM);
 
 * Simulation Result
 
-![DopplerFFT](https://user-images.githubusercontent.com/51704629/66048007-bf913b80-e563-11e9-9efa-57708d3ca498.png)
+![DopplerFFT](https://github.com/Felix-yuan2018/SFND_Radar_Target_Generation_and_Detection/blob/master/img/DopplerFFT.png)
 
 
 ## 7. CFAR implementation
@@ -188,19 +199,27 @@ figure,surf(doppler_axis,range_axis,RDM);
 * Select the number of Training Cells in both the dimensions.
 
 ```matlab
-Td = 10; Tr = 8;
+Td = 10; 
+Tr = 8;
 ```
 
 * Select the number of Guard Cells in both dimensions around the Cell under test (CUT) for accurate estimation
 
 ```matlab
-Gd = 4; Gr = 4;
+Gd = 4; 
+Gr = 4;
 ```
 
 * Offset the threshold by SNR value in dB
 
 ```matlab
-offset = 1.4;
+offset = 6;
+```
+
+* Create a vector to store noise_level for each iteration on training cells
+
+```matlab
+noise_level = zeros(1,1);
 ```
 
 * Create a vector to store noise_level for each iteration on training cells design a loop such that it slides the CUT across range doppler map by giving margins at the edges for Training and Guard Cells.
@@ -214,55 +233,45 @@ offset = 1.4;
 * Use RDM[x,y] as the matrix from the output of 2D FFT for implementing CFAR
 
 ```matlab
-RDM = RDM/max(max(RDM));
-
-for i = Tr+Gr+1:(Nr/2)-(Gr+Tr)
-    for j = Td+Gd+1:Nd-(Gd+Td)
-        
-       % Create a vector to store noise_level for each iteration on training cells
-        noise_level = zeros(1,1);
-        
-        % Calculate noise SUM in the area around CUT
-        for p = i-(Tr+Gr) : i+(Tr+Gr)
-            for q = j-(Td+Gd) : j+(Td+Gd)
-                if (abs(i-p) > Gr || abs(j-q) > Gd)
-                    noise_level = noise_level + db2pow(RDM(p,q));
+RESULT=zeros(Nr/2,Nd);
+ 
+for i= Tr+Gr+1: Nr/2-(Gr+Tr)
+    for j= Td+Gd+1:Nd-(Gd+Td)
+        noise_level=0;
+        train_cell=0;
+        %sliding the grid
+        for p= i-(Tr+Gr):i+Tr+Gr
+            for q= j-(Td+Gd):j+Td+Gd
+                %Verify that there is Guard Cells in both dimensions around the Cell under test (CUT) 
+                if(abs(i-p)>Gr||abs(j-q)>Gd)
+                    noise_level=noise_level+db2pow(RDM(p,q));
+                    train_cell=train_cell+1;
                 end
             end
         end
         
-        % Calculate threshould from noise average then add the offset
-        threshold = pow2db(noise_level/(2*(Td+Gd+1)*2*(Tr+Gr+1)-(Gr*Gd)-1));
-        threshold = threshold + offset;
-        CUT = RDM(i,j);
+        noise_average = noise_level/train_cell;
+        noise_threshold = pow2db(noise_average);
+        noise_threshold = noise_threshold+offset;
         
-        if (CUT < threshold)
-            RDM(i,j) = 0;
+        CUT=RDM(i,j);
+        if(CUT<noise_threshold)
+            RESULT(i,j)=0;
         else
-            RDM(i,j) = 1;
+            RESULT(i,j)=1;
         end
     end
 end
-```
-
-* The process above will generate a thresholded block, which is smaller than the Range Doppler Map as the CUT cannot be located at the edges of matrix.
-* Hence,few cells will not be thresholded.
-* To keep the map size same set those values to 0.
-
-```matlab
-RDM(union(1:(Tr+Gr),end-(Tr+Gr-1):end),:) = 0;  % Rows
-RDM(:,union(1:(Td+Gd),end-(Td+Gd-1):end)) = 0;  % Columns 
 ```
 
 * Display the CFAR output using the Surf function like we did for Range
 * Doppler Response output.
 
 ```matlab
-figure('Name','CA-CFAR Filtered RDM')
-surf(doppler_axis,range_axis,RDM);
+figure,surf(doppler_axis,range_axis,RESULT);
 colorbar;
 ```
 
 * Simulation Result
 
-![CA-CFAR_Filtered_RDM](https://user-images.githubusercontent.com/51704629/66048290-3af2ed00-e564-11e9-84e6-7914249a7714.png)
+![CA-CFAR_Filtered_RDM](https://github.com/Felix-yuan2018/SFND_Radar_Target_Generation_and_Detection/blob/master/img/CA-CFAR_Filtered_RDM.png)

@@ -9,6 +9,12 @@ clc;
 % Max Velocity = 100 m/s
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+fc= 77e9;             %carrier freq
+c=3e8;                %speed of light
+max_range=200;        %max range
+range_resolution=1;   % range resolution can determine bandwith
+max_velocity=100;     % max velocity can determine Ts_x-axis
+
 %speed of light = 3e8
 %% User Defined Range and Velocity of target
 % *%TODO* :
@@ -30,14 +36,7 @@ velocity = -20;     %initial velocity of the target
 
 %Operating carrier frequency of Radar 
 
-fc= 77e9;             %carrier freq
-c=3e8;                %speed of light
-max_range=200;        %max range
-range_resolution=1;   % range resolution can determine bandwith
-max_velocity=100;     % max velocity can determine Ts_x-axis
-
-
-wavelength = c/fc;    %wavelength
+%wavelength = c/fc;    %wavelength
 Bandwidth= c/(2*range_resolution);   %d_res = c/2*Bsweep
 
 %Sweep time for each chrip is defined as rule by 5.5 times of round trip
